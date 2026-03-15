@@ -10,6 +10,7 @@ jobs:
   build:
     name: Build and publish Docker image to Docker Hub and GitHub Containers Repository
     runs-on: ubuntu-latest
+    environment: development
     steps:
       - name: Checkout
         uses: actions/checkout@v4
