@@ -1,9 +1,14 @@
 <div id="top"></div>
 
-# Dell iDRAC fan controller Docker image
+# Dell iDRAC Fan Controller
+
+> Intelligent, gradual fan speed control for Dell PowerEdge servers — keeps your server quiet under light load while automatically scaling up as temperatures rise, and handing off to Dell's built-in protection when it matters most.
+
+Unlike simple on/off fan controllers that jump between a fixed quiet speed and full Dell control, this controller scales fan speed **continuously** across a configurable temperature range. Three defined zones give you fine-grained control over noise, airflow, and thermal safety.
 
 ## Table of contents
 <ol>
+  <li><a href="#how-it-works">How it works</a></li>
   <li><a href="#container-console-log-example">Container console log example</a></li>
   <li><a href="#requirements">Requirements</a></li>
   <li><a href="#supported-architectures">Supported architectures</a></li>
@@ -14,6 +19,107 @@
   <li><a href="#contributing">Contributing</a></li>
   <li><a href="#license">License</a></li>
 </ol>
+
+<!-- HOW IT WORKS -->
+## How it works
+
+### Three-zone fan control
+
+Fan speed is determined by three zones based on CPU temperature:
+
+```
+Fan
+Speed
+  │
+  │                                        ╔══════════════════╗
+  │                                        ║  Dell default    ║
+MAX%┤                            ┌─────────╢  dynamic control ║
+  │                           ╱  │         ║  (safety)        ║
+  │                        ╱     │         ╚══════════════════╝
+  │                     ╱        │
+  │                  ╱           │
+  │               ╱              │
+  │            ╱                 │
+  │         ╱                    │
+MIN%┤────────┘                    │
+  │                               │
+  └──────────┬──────────────┬─────┴──────── CPU Temp
+           LOWER          UPPER
+         threshold       threshold
+```
+
+| Zone | Condition | Behaviour |
+|---|---|---|
+| **Quiet** | `temp ≤ LOWER_THRESHOLD` | Fans held at `FAN_SPEED_MIN` |
+| **Dynamic** | `LOWER_THRESHOLD < temp < UPPER_THRESHOLD` | Fan speed scales linearly between `FAN_SPEED_MIN` and `FAN_SPEED_MAX` |
+| **Dell default** | `temp ≥ UPPER_THRESHOLD` | Dell's built-in dynamic control takes over for maximum cooling |
+
+### Fan speed curve
+
+The chart below uses the default threshold and speed values as an example:
+
+```mermaid
+xychart-beta
+    title "Fan speed vs CPU temperature (example: lower=45°C, upper=75°C, min=5%, max=50%)"
+    x-axis "CPU Temperature (°C)" [30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80]
+    y-axis "Fan Speed (%)" 0 --> 100
+    line [5, 5, 5, 5, 11, 18, 25, 33, 40, 50, 50]
+```
+
+> Above the upper threshold the chart shows `FAN_SPEED_MAX` but in practice Dell's dynamic control takes over and fans ramp freely beyond that point.
+
+### State machine
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> Dell_Default
+
+    Dell_Default : Dell Default\n(safety)
+    Quiet : Quiet\n(FAN_SPEED_MIN)
+    Dynamic : Dynamic\n(scaled FAN_SPEED_MIN → FAN_SPEED_MAX)
+
+    Dell_Default --> Quiet : temp ≤ lower threshold
+    Dell_Default --> Dynamic : lower < temp < upper
+
+    Quiet --> Dynamic : temp > lower threshold
+    Quiet --> Dell_Default : temp ≥ upper threshold
+
+    Dynamic --> Quiet : temp ≤ lower threshold − hysteresis
+    Dynamic --> Dell_Default : temp ≥ upper threshold
+```
+
+**Hysteresis:** when returning from Dynamic to Quiet, the temperature must drop 2°C *below* the lower threshold. This prevents rapid fan oscillation when the CPU hovers near the boundary.
+
+### Main loop
+
+```mermaid
+flowchart TD
+    A([Container start]) --> B{ENABLE_DELL_CONTROL\nON_STARTUP?}
+    B -- true --> C[Apply Dell default\nfan control]
+    B -- false --> D
+    C --> D[Validate env vars\nDetect server model\nProbe sensors]
+    D --> E[Read all sensors\nsdr list full]
+    E --> F{IPMI\nsucceeded?}
+    F -- no --> G[Increment failure\ncounter]
+    G --> H{Failures ≥\nMAX_CONSECUTIVE?}
+    H -- yes --> I([Apply Dell default\nand exit])
+    H -- no --> E
+    F -- yes --> J[Take max of all\nCPU temperatures]
+    J --> K{Which\nzone?}
+    K -- temp ≤ lower --> L[Apply FAN_SPEED_MIN]
+    K -- between thresholds --> M[Calculate scaled speed\nlinear interpolation\nround up]
+    M --> N[Apply scaled speed]
+    K -- temp ≥ upper --> O[Apply Dell default\nfan control]
+    L --> P[Print status row]
+    N --> P
+    O --> P
+    P --> Q[Sleep CHECK_INTERVAL]
+    Q --> E
+```
+
+<p align="right">(<a href="#top">back to top</a>)</p>
 
 ## Container console log example
 
@@ -154,16 +260,6 @@ services:
 
 <!-- PARAMETERS -->
 ## Parameters
-
-### Fan control
-
-The controller operates in three states based on CPU temperature:
-
-- **Below lower threshold** — fans are held at `FAN_SPEED_MIN`
-- **Between thresholds** — fan speed is scaled linearly between `FAN_SPEED_MIN` and `FAN_SPEED_MAX` based on how close the temperature is to the upper threshold
-- **At or above upper threshold** — Dell's default dynamic fan control is restored, allowing iDRAC to ramp fans freely for safety
-
-A hysteresis offset prevents rapid switching: the temperature must drop 2°C below the lower threshold before returning to minimum fan speed.
 
 ### Parameters
 
