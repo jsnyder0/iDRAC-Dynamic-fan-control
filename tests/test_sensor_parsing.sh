@@ -45,4 +45,20 @@ function run_ipmitool() {
 retrieve_sensor_data 2>/dev/null
 assert_exit_code "$?" "1" "returns 1 when CPU temperature is missing"
 
+printf "\n=== retrieve_sensor_data (missing optional sensors) ===\n"
+
+# Single CPU, no exhaust sensor, no power consumption
+function run_ipmitool() {
+  echo "Inlet Temp       | 22 degrees C      | ok"
+  echo "Temp             | 40 degrees C      | ok"
+}
+
+retrieve_sensor_data 2>/dev/null
+assert_exit_code "$?" "0" "succeeds with only required sensors present"
+assert_equals "$CPU1_TEMPERATURE" "40" "CPU1 temperature parsed correctly"
+assert_equals "$CPU2_TEMPERATURE" "-" "CPU2 normalised to '-' when absent"
+assert_equals "$EXHAUST_TEMPERATURE" "-" "exhaust normalised to '-' when absent"
+assert_equals "$POWER_CONSUMPTION" "-" "power normalised to '-' when absent"
+assert_equals "$NUMBER_OF_DETECTED_CPUS" "1" "one CPU detected"
+
 print_summary

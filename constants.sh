@@ -7,7 +7,7 @@ readonly TABLE_HEADER_PRINT_INTERVAL=10
 # before returning to minimum fan speed
 readonly HYSTERESIS_OFFSET=2
 
-# Hard floor — fan speed will never be set below this value regardless of FAN_SPEED_MIN
+# Hard floor — fan speed will never be set below this value. FAN_SPEED_MIN must be >= this value (enforced at startup).
 readonly FAN_SPEED_HARD_FLOOR=5
 
 # Number of consecutive IPMI failures before the script exits and hands control back to Dell

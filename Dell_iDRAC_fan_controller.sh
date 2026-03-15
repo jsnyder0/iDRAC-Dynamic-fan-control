@@ -27,7 +27,7 @@ if [[ ! $SERVER_MANUFACTURER == "DELL" ]]; then
   print_error_and_exit "Your server isn't a Dell product"
 fi
 
-# Detect server generation to set correct CPU sensor indices
+# Detect server generation — used to determine whether PCIe cooling response commands apply
 if [[ $SERVER_MODEL =~ .*[RT][[:space:]]?[0-9][4-9]0.* ]]; then
   readonly DELL_POWEREDGE_GEN_14_OR_NEWER=true
 else

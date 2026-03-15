@@ -20,6 +20,13 @@ function validate_env_vars() {
     exit 1
   fi
 
+  # For LAN mode, apply credential defaults then validate they are non-empty.
+  # Defaults apply when unset or empty — explicit empty strings are treated the same as unset.
+  if [[ "$IDRAC_HOST" != "local" ]]; then
+    : "${IDRAC_USERNAME:=root}"
+    : "${IDRAC_PASSWORD:=calvin}"
+  fi
+
   # FAN_SPEED_MIN must be an integer >= FAN_SPEED_HARD_FLOOR
   if ! [[ "$FAN_SPEED_MIN" =~ ^[0-9]+$ ]]; then
     print_error "FAN_SPEED_MIN must be a positive integer, got: $FAN_SPEED_MIN"
@@ -72,7 +79,8 @@ function validate_env_vars() {
     ((errors++))
   fi
 
-  # ENABLE_DELL_CONTROL_ON_STARTUP must be true or false
+  # ENABLE_DELL_CONTROL_ON_STARTUP is optional — default to false if unset
+  : "${ENABLE_DELL_CONTROL_ON_STARTUP:=false}"
   if [[ "$ENABLE_DELL_CONTROL_ON_STARTUP" != "true" && "$ENABLE_DELL_CONTROL_ON_STARTUP" != "false" ]]; then
     print_error "ENABLE_DELL_CONTROL_ON_STARTUP must be 'true' or 'false', got: $ENABLE_DELL_CONTROL_ON_STARTUP"
     ((errors++))
@@ -250,8 +258,13 @@ function retrieve_sensor_data() {
     CPUS_TEMPERATURES+="${cpu_temps[$i]}"
   done
 
-  # Parse power consumption
+  # Parse power consumption — normalize to "-" if not present
   POWER_CONSUMPTION=$(echo "$raw_data" | grep "Pwr Consumption" | sed -E 's/.*\|[[:space:]]+([0-9]+) Watts.*/\1/')
+  : "${POWER_CONSUMPTION:=-}"
+
+  # Normalize optional sensors to "-" if not present so callers never receive empty strings
+  : "${EXHAUST_TEMPERATURE:=-}"
+  : "${CPU2_TEMPERATURE:=-}"
 
   # Validate that we have at least CPU1 and inlet temps
   if [ -z "$CPU1_TEMPERATURE" ] || [ -z "$INLET_TEMPERATURE" ]; then

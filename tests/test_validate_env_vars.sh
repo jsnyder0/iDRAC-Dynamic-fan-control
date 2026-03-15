@@ -106,4 +106,42 @@ output_and_exit=$(run_validation \
 exit_code="${output_and_exit##*$'\n'}"
 assert_exit_code "$exit_code" "1" "ENABLE_DELL_CONTROL_ON_STARTUP=yes fails validation"
 
+# LAN mode with explicit empty username — defaults to root and passes
+output_and_exit=$(run_validation \
+  "IDRAC_HOST=192.168.1.100" \
+  "IDRAC_USERNAME=" \
+  "IDRAC_PASSWORD=password" \
+  "FAN_SPEED_MIN=10" "FAN_SPEED_MAX=80" \
+  "CPU_TEMPERATURE_LOWER_THRESHOLD=45" "CPU_TEMPERATURE_UPPER_THRESHOLD=75" \
+  "CHECK_INTERVAL=60" "ENABLE_DELL_CONTROL_ON_STARTUP=false")
+exit_code="${output_and_exit##*$'\n'}"
+assert_exit_code "$exit_code" "0" "LAN mode with empty IDRAC_USERNAME defaults to root and passes"
+
+# LAN mode without credentials — should default to root/calvin and pass
+output_and_exit=$(run_validation \
+  "IDRAC_HOST=192.168.1.100" \
+  "FAN_SPEED_MIN=10" "FAN_SPEED_MAX=80" \
+  "CPU_TEMPERATURE_LOWER_THRESHOLD=45" "CPU_TEMPERATURE_UPPER_THRESHOLD=75" \
+  "CHECK_INTERVAL=60" "ENABLE_DELL_CONTROL_ON_STARTUP=false")
+exit_code="${output_and_exit##*$'\n'}"
+assert_exit_code "$exit_code" "0" "LAN mode without credentials defaults to root/calvin and passes"
+
+# Local mode without credentials — should pass
+output_and_exit=$(run_validation \
+  "IDRAC_HOST=local" \
+  "FAN_SPEED_MIN=10" "FAN_SPEED_MAX=80" \
+  "CPU_TEMPERATURE_LOWER_THRESHOLD=45" "CPU_TEMPERATURE_UPPER_THRESHOLD=75" \
+  "CHECK_INTERVAL=60" "ENABLE_DELL_CONTROL_ON_STARTUP=false")
+exit_code="${output_and_exit##*$'\n'}"
+assert_exit_code "$exit_code" "0" "local mode without credentials passes validation"
+
+# ENABLE_DELL_CONTROL_ON_STARTUP unset — should default to false and pass
+output_and_exit=$(run_validation \
+  "IDRAC_HOST=192.168.1.100" \
+  "FAN_SPEED_MIN=10" "FAN_SPEED_MAX=80" \
+  "CPU_TEMPERATURE_LOWER_THRESHOLD=45" "CPU_TEMPERATURE_UPPER_THRESHOLD=75" \
+  "CHECK_INTERVAL=60")
+exit_code="${output_and_exit##*$'\n'}"
+assert_exit_code "$exit_code" "0" "ENABLE_DELL_CONTROL_ON_STARTUP unset defaults to false and passes"
+
 print_summary
