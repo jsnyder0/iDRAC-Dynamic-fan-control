@@ -27,13 +27,6 @@ Unlike simple on/off fan controllers that jump between a fixed quiet speed and f
 
 Fan speed is determined by three zones based on CPU temperature:
 
-```mermaid
-xychart-beta
-    title "Three zones: Quiet (flat) → Dynamic (linear ramp) → Dell Default (safety handoff)"
-    x-axis "CPU Temperature (°C)" [20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]
-    y-axis "Fan Speed (%)" 0 --> 100
-    line [5, 5, 5, 5, 5, 5, 11, 18, 25, 33, 40, 50, 50, 50, 50]
-```
 
 | Zone | Condition | Behaviour |
 |---|---|---|
