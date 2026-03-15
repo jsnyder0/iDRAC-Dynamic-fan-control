@@ -8,4 +8,4 @@ source functions.sh
 
 set_iDRAC_login_string "$IDRAC_HOST" "$IDRAC_USERNAME" "$IDRAC_PASSWORD"
 
-ipmitool -I $IDRAC_LOGIN_STRING sdr type temperature
+run_ipmitool -I $IDRAC_LOGIN_STRING sdr type temperature
