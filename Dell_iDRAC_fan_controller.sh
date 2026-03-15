@@ -7,23 +7,19 @@
 source functions.sh
 source constants.sh
 
-# Trap the signals for container exit and run graceful_exit function
+# Trap signals for container exit and restore Dell fan control before stopping
 trap 'graceful_exit' SIGINT SIGQUIT SIGTERM
 
-# Prepare, format and define initial variables
-
-# readonly DELL_FRESH_AIR_COMPLIANCE=45
-
-# Check if FAN_SPEED variable is in hexadecimal format. If not, convert it to hexadecimal
-if [[ "$FAN_SPEED" == 0x* ]]; then
-  readonly DECIMAL_FAN_SPEED=$(convert_hexadecimal_value_to_decimal "$FAN_SPEED")
-  readonly HEXADECIMAL_FAN_SPEED="$FAN_SPEED"
-else
-  readonly DECIMAL_FAN_SPEED="$FAN_SPEED"
-  readonly HEXADECIMAL_FAN_SPEED=$(convert_decimal_value_to_hexadecimal "$FAN_SPEED")
-fi
+# Validate all environment variables before doing anything else
+validate_env_vars
 
 set_iDRAC_login_string "$IDRAC_HOST" "$IDRAC_USERNAME" "$IDRAC_PASSWORD"
+
+# Optionally apply Dell default fan control before the first temp read (fail-safe startup)
+if [ "$ENABLE_DELL_CONTROL_ON_STARTUP" = "true" ]; then
+  echo "Applying Dell default fan control before first temperature read..."
+  apply_Dell_default_fan_control_profile
+fi
 
 get_Dell_server_model
 
@@ -31,99 +27,99 @@ if [[ ! $SERVER_MANUFACTURER == "DELL" ]]; then
   print_error_and_exit "Your server isn't a Dell product"
 fi
 
-# If server model is Gen 14 (*40) or newer
+# Detect server generation — used to determine whether PCIe cooling response commands apply
 if [[ $SERVER_MODEL =~ .*[RT][[:space:]]?[0-9][4-9]0.* ]]; then
   readonly DELL_POWEREDGE_GEN_14_OR_NEWER=true
-  readonly CPU1_TEMPERATURE_INDEX=2
-  readonly CPU2_TEMPERATURE_INDEX=4
 else
   readonly DELL_POWEREDGE_GEN_14_OR_NEWER=false
-  readonly CPU1_TEMPERATURE_INDEX=1
-  readonly CPU2_TEMPERATURE_INDEX=2
 fi
 
-# Log main informations
-echo "Server model: $SERVER_MANUFACTURER $SERVER_MODEL"
-echo "iDRAC/IPMI host: $IDRAC_HOST"
-
-# Log the fan speed objective, CPU temperature threshold and check interval
-echo "Fan speed objective: $DECIMAL_FAN_SPEED%"
-echo "CPU temperature threshold: "$CPU_TEMPERATURE_THRESHOLD"°C"
-echo "Check interval: ${CHECK_INTERVAL}s"
+init_colors
+print_banner "$SERVER_MANUFACTURER" "$SERVER_MODEL" "$IDRAC_HOST"
+echo "Fan speed range:        ${FAN_SPEED_MIN}% - ${FAN_SPEED_MAX}%"
+echo "Temperature thresholds: ${CPU_TEMPERATURE_LOWER_THRESHOLD}°C (lower) / ${CPU_TEMPERATURE_UPPER_THRESHOLD}°C (upper)"
+echo "Check interval:         ${CHECK_INTERVAL}s"
 echo ""
 
 TABLE_HEADER_PRINT_COUNTER=$TABLE_HEADER_PRINT_INTERVAL
-# Set the flag used to check if the active fan control profile has changed
-IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED=true
+CONSECUTIVE_IPMI_FAILURES=0
 
-# Check present sensors
-IS_EXHAUST_TEMPERATURE_SENSOR_PRESENT=true
-IS_CPU2_TEMPERATURE_SENSOR_PRESENT=true
-retrieve_temperatures $IS_EXHAUST_TEMPERATURE_SENSOR_PRESENT $IS_CPU2_TEMPERATURE_SENSOR_PRESENT
-if [ -z "$EXHAUST_TEMPERATURE" ]; then
-  echo "No exhaust temperature sensor detected."
-  IS_EXHAUST_TEMPERATURE_SENSOR_PRESENT=false
-fi
-if [ -z "$CPU2_TEMPERATURE" ]; then
-  echo "No CPU2 temperature sensor detected."
-  IS_CPU2_TEMPERATURE_SENSOR_PRESENT=false
-fi
-# Output new line to beautify output if one of the previous conditions have echoed
-if ! $IS_EXHAUST_TEMPERATURE_SENSOR_PRESENT || ! $IS_CPU2_TEMPERATURE_SENSOR_PRESENT; then
-  echo ""
-fi
+# Current fan control state: "min", "dynamic", or "dell"
+# Start as "dell" so hysteresis logic doesn't assume we were already at min speed
+CURRENT_STATE="dell"
 
-#readonly NUMBER_OF_DETECTED_CPUS=(${CPUS_TEMPERATURES//;/ })
-# TODO : write "X CPU sensors detected." and remove previous ifs
-readonly HEADER=$(build_header $NUMBER_OF_DETECTED_CPUS)
-
-# Start monitoring
+# Main monitoring loop
 while true; do
-  # Sleep for the specified interval before taking another reading
   sleep "$CHECK_INTERVAL" &
   SLEEP_PROCESS_PID=$!
 
-  retrieve_temperatures $IS_EXHAUST_TEMPERATURE_SENSOR_PRESENT $IS_CPU2_TEMPERATURE_SENSOR_PRESENT
+  # Retrieve all sensor data in a single IPMI call
+  if ! retrieve_sensor_data; then
+    ((CONSECUTIVE_IPMI_FAILURES++))
+    echo "IPMI failure $CONSECUTIVE_IPMI_FAILURES/$MAX_CONSECUTIVE_IPMI_FAILURES"
 
-  # Initialize a variable to store the comments displayed when the fan control profile changed
-  COMMENT=" -"
-  # Check if CPU 1 is overheating then apply Dell default dynamic fan control profile if true
-  if CPU1_OVERHEATING; then
-    apply_Dell_default_fan_control_profile
-
-    if ! $IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED; then
-      IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED=true
-
-      # If CPU 2 temperature sensor is present, check if it is overheating too.
-      # Do not apply Dell default dynamic fan control profile as it has already been applied before
-      if $IS_CPU2_TEMPERATURE_SENSOR_PRESENT && CPU2_OVERHEATING; then
-        COMMENT="CPU 1 and CPU 2 temperatures are too high, Dell default dynamic fan control profile applied for safety"
-      else
-        COMMENT="CPU 1 temperature is too high, Dell default dynamic fan control profile applied for safety"
-      fi
+    if [ $CONSECUTIVE_IPMI_FAILURES -ge $MAX_CONSECUTIVE_IPMI_FAILURES ]; then
+      apply_Dell_default_fan_control_profile
+      print_error_and_exit "Too many consecutive IPMI failures, Dell default fan control restored"
     fi
-  # If CPU 2 temperature sensor is present, check if it is overheating then apply Dell default dynamic fan control profile if true
-  elif $IS_CPU2_TEMPERATURE_SENSOR_PRESENT && CPU2_OVERHEATING; then
-    apply_Dell_default_fan_control_profile
 
-    if ! $IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED; then
-      IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED=true
-      COMMENT="CPU 2 temperature is too high, Dell default dynamic fan control profile applied for safety"
-    fi
-  else
-    apply_user_fan_control_profile
-
-    # Check if user fan control profile is applied then apply it if not
-    if $IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED; then
-      IS_DELL_DEFAULT_FAN_CONTROL_PROFILE_APPLIED=false
-      COMMENT="CPU temperature decreased and is now OK (<= $CPU_TEMPERATURE_THRESHOLD°C), user's fan control profile applied."
-    fi
+    wait $SLEEP_PROCESS_PID
+    continue
   fi
 
-  # If server model is not Gen 14 (*40) or newer
+  CONSECUTIVE_IPMI_FAILURES=0
+
+  # Use the highest CPU temperature as input to the control logic
+  MAX_CPU_TEMPERATURE=$CPU1_TEMPERATURE
+  if [ -n "$CPU2_TEMPERATURE" ] && [ "$CPU2_TEMPERATURE" != "-" ] && [ "$CPU2_TEMPERATURE" -gt "$MAX_CPU_TEMPERATURE" ]; then
+    MAX_CPU_TEMPERATURE=$CPU2_TEMPERATURE
+  fi
+
+  # Determine the new fan control state
+  determine_fan_control_state "$MAX_CPU_TEMPERATURE" "$CURRENT_STATE"
+  NEW_STATE="$FAN_CONTROL_STATE"
+
+  COMMENT=" -"
+  TARGET_FAN_SPEED="-"
+
+  case "$NEW_STATE" in
+    min)
+      TARGET_FAN_SPEED=$FAN_SPEED_MIN
+      if ! apply_static_fan_speed "$TARGET_FAN_SPEED"; then
+        apply_Dell_default_fan_control_profile
+        print_error_and_exit "Failed to apply fan speed, Dell default fan control restored"
+      fi
+      CURRENT_FAN_CONTROL_PROFILE="User static (${TARGET_FAN_SPEED}%)"
+      if [ "$CURRENT_STATE" != "min" ]; then
+        COMMENT="Temp at or below ${CPU_TEMPERATURE_LOWER_THRESHOLD}°C, minimum fan speed applied"
+      fi
+      ;;
+    dynamic)
+      TARGET_FAN_SPEED=$(calculate_dynamic_fan_speed "$MAX_CPU_TEMPERATURE")
+      if ! apply_static_fan_speed "$TARGET_FAN_SPEED"; then
+        apply_Dell_default_fan_control_profile
+        print_error_and_exit "Failed to apply fan speed, Dell default fan control restored"
+      fi
+      CURRENT_FAN_CONTROL_PROFILE="Dynamic (${TARGET_FAN_SPEED}%)"
+      if [ "$CURRENT_STATE" != "dynamic" ]; then
+        COMMENT="Temp between thresholds, dynamic fan control applied"
+      fi
+      ;;
+    dell)
+      if ! apply_Dell_default_fan_control_profile; then
+        print_error_and_exit "Failed to apply Dell default fan control"
+      fi
+      if [ "$CURRENT_STATE" != "dell" ]; then
+        COMMENT="Temp reached ${CPU_TEMPERATURE_UPPER_THRESHOLD}°C, Dell default fan control restored"
+      fi
+      ;;
+  esac
+
+  CURRENT_STATE="$NEW_STATE"
+
+  # Gen 13 and older: handle third-party PCIe card cooling response
+  THIRD_PARTY_PCIE_CARD_DELL_DEFAULT_COOLING_RESPONSE_STATUS="-"
   if ! $DELL_POWEREDGE_GEN_14_OR_NEWER; then
-    # Enable or disable, depending on the user's choice, third-party PCIe card Dell default cooling response
-    # No comment will be displayed on the change of this parameter since it is not related to the temperature of any device (CPU, GPU, etc...) but only to the settings made by the user when launching this Docker container
     if "$DISABLE_THIRD_PARTY_PCIE_CARD_DELL_DEFAULT_COOLING_RESPONSE"; then
       disable_third_party_PCIe_card_Dell_default_cooling_response
       THIRD_PARTY_PCIE_CARD_DELL_DEFAULT_COOLING_RESPONSE_STATUS="Disabled"
@@ -133,12 +129,15 @@ while true; do
     fi
   fi
 
-  # Print temperatures, active fan control profile and comment if any change happened during last time interval
+  # Print table header periodically
   if [ $TABLE_HEADER_PRINT_COUNTER -eq $TABLE_HEADER_PRINT_INTERVAL ]; then
-    printf "%s\n" "$HEADER"
+    print_table_header "$NUMBER_OF_DETECTED_CPUS"
     TABLE_HEADER_PRINT_COUNTER=0
   fi
-  print_temperature_array_line "$INLET_TEMPERATURE" "$CPUS_TEMPERATURES" "$EXHAUST_TEMPERATURE" "$CURRENT_FAN_CONTROL_PROFILE" "$THIRD_PARTY_PCIE_CARD_DELL_DEFAULT_COOLING_RESPONSE_STATUS" "$COMMENT"
+
+  print_table_row "$INLET_TEMPERATURE" "$CPUS_TEMPERATURES" "$EXHAUST_TEMPERATURE" \
+    "$TARGET_FAN_SPEED" "$POWER_CONSUMPTION" "$CURRENT_FAN_CONTROL_PROFILE" "$COMMENT"
+
   ((TABLE_HEADER_PRINT_COUNTER++))
   wait $SLEEP_PROCESS_PID
 done

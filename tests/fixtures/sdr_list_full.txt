@@ -1,0 +1,19 @@
+Fan1 RPM         | 6240 RPM          | ok
+Fan2 RPM         | 6360 RPM          | ok
+Fan3 RPM         | 6360 RPM          | ok
+Fan4 RPM         | 6240 RPM          | ok
+Fan5 RPM         | 6240 RPM          | ok
+Fan6 RPM         | 6240 RPM          | ok
+Inlet Temp       | 22 degrees C      | ok
+CPU Usage        | 1 percent         | ok
+IO Usage         | 0 percent         | ok
+MEM Usage        | 0 percent         | ok
+SYS Usage        | 2 percent         | ok
+Exhaust Temp     | 38 degrees C      | ok
+Temp             | 40 degrees C      | ok
+Temp             | 38 degrees C      | ok
+Current 1        | 1 Amps            | ok
+Current 2        | 1 Amps            | ok
+Voltage 1        | 118 Volts         | ok
+Voltage 2        | 116 Volts         | ok
+Pwr Consumption  | 224 Watts         | ok

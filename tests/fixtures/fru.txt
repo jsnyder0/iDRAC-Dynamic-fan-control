@@ -1,0 +1,11 @@
+FRU Device Description : Builtin FRU Device (ID 0)
+ Board Mfg Date        : Mon Jan  1 00:00:00 1996
+ Board Mfg             : DELL
+ Board Product         : PowerEdge R740
+ Board Serial          : ABC1234
+ Board Part Number     : 0ABC123
+ Product Manufacturer  : DELL
+ Product Name          : PowerEdge R740
+ Product Part Number   : 0ABC456
+ Product Version       : 01
+ Product Serial        : XYZ5678
