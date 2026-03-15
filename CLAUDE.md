@@ -10,7 +10,7 @@ This is a Dockerized Bash script that dynamically controls fan speeds on Dell Po
 
 **Build the Docker image locally:**
 ```bash
-docker build -t tigerblue77/dell_idrac_fan_controller:dev .
+docker build -t jeffsnyder0/dell_idrac_fan_controller:dev .
 ```
 
 **Run without Docker (for local testing):**
@@ -39,7 +39,7 @@ docker run -d \
   -e FAN_SPEED=5 \
   -e CPU_TEMPERATURE_THRESHOLD=50 \
   -e CHECK_INTERVAL=60 \
-  tigerblue77/dell_idrac_fan_controller:latest
+  jeffsnyder0/dell_idrac_fan_controller:latest
 ```
 
 **Run with local iDRAC** (requires `--device=/dev/ipmi0:/dev/ipmi0:rw`).
@@ -62,7 +62,7 @@ The project is split across three Bash files sourced together:
 
 ## CI/CD
 
-The GitHub Actions workflow (`.github/workflows/build_and_publish_docker_image.yml`) triggers on version tags (`v[0-9]+.[0-9]+`) and publishes multi-arch images (AMD64 + ARM64) to both Docker Hub (`tigerblue77/dell_idrac_fan_controller`) and GitHub Container Registry (`ghcr.io/tigerblue77/dell_idrac_fan_controller`).
+The GitHub Actions workflow (`.github/workflows/build_and_publish_docker_image.yml`) triggers on version tags (`v[0-9]+.[0-9]+`) and publishes multi-arch images (AMD64 + ARM64) to both Docker Hub (`jeffsnyder0/dell_idrac_fan_controller`) and GitHub Container Registry (`ghcr.io/jsnyder0/iDRAC-Dynamic-fan-control`).
 
 To release: push a tag matching `v[0-9]+.[0-9]+`.
 

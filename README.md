@@ -27,25 +27,12 @@ Unlike simple on/off fan controllers that jump between a fixed quiet speed and f
 
 Fan speed is determined by three zones based on CPU temperature:
 
-```
-Fan
-Speed
-  │
-  │                                        ╔══════════════════╗
-  │                                        ║  Dell default    ║
-MAX%┤                            ┌─────────╢  dynamic control ║
-  │                           ╱  │         ║  (safety)        ║
-  │                        ╱     │         ╚══════════════════╝
-  │                     ╱        │
-  │                  ╱           │
-  │               ╱              │
-  │            ╱                 │
-  │         ╱                    │
-MIN%┤────────┘                    │
-  │                               │
-  └──────────┬──────────────┬─────┴──────── CPU Temp
-           LOWER          UPPER
-         threshold       threshold
+```mermaid
+xychart-beta
+    title "Three zones: Quiet (flat) → Dynamic (linear ramp) → Dell Default (safety handoff)"
+    x-axis "CPU Temperature (°C)" [20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]
+    y-axis "Fan Speed (%)" 0 --> 100
+    line [5, 5, 5, 5, 5, 5, 11, 18, 25, 33, 40, 50, 50, 50, 50]
 ```
 
 | Zone | Condition | Behaviour |
@@ -171,8 +158,8 @@ This Docker container is currently built and available for the following CPU arc
 <!-- DOWNLOAD DOCKER IMAGE -->
 ## Download Docker image
 
-- [Docker Hub](https://hub.docker.com/r/tigerblue77/dell_idrac_fan_controller)
-- [GitHub Containers Repository](https://github.com/tigerblue77/Dell_iDRAC_fan_controller_Docker/pkgs/container/dell_idrac_fan_controller)
+- [Docker Hub](https://hub.docker.com/r/jeffsnyder0/dell_idrac_fan_controller)
+- [GitHub Containers Repository](https://github.com/jsnyder0/iDRAC-Dynamic-fan-control/pkgs/container/iDRAC-Dynamic-fan-control)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -192,7 +179,7 @@ docker run -d \
   -e CPU_TEMPERATURE_UPPER_THRESHOLD=75 \
   -e CHECK_INTERVAL=60 \
   --device=/dev/ipmi0:/dev/ipmi0:rw \
-  tigerblue77/dell_idrac_fan_controller:latest
+  jeffsnyder0/dell_idrac_fan_controller:latest
 ```
 
 2. with LAN iDRAC:
@@ -209,7 +196,7 @@ docker run -d \
   -e CPU_TEMPERATURE_LOWER_THRESHOLD=45 \
   -e CPU_TEMPERATURE_UPPER_THRESHOLD=75 \
   -e CHECK_INTERVAL=60 \
-  tigerblue77/dell_idrac_fan_controller:latest
+  jeffsnyder0/dell_idrac_fan_controller:latest
 ```
 
 `docker-compose.yml` examples:
@@ -221,7 +208,7 @@ version: '3.8'
 
 services:
   Dell_iDRAC_fan_controller:
-    image: tigerblue77/dell_idrac_fan_controller:latest
+    image: jeffsnyder0/dell_idrac_fan_controller:latest
     container_name: Dell_iDRAC_fan_controller
     restart: unless-stopped
     environment:
@@ -242,7 +229,7 @@ version: '3.8'
 
 services:
   Dell_iDRAC_fan_controller:
-    image: tigerblue77/dell_idrac_fan_controller:latest
+    image: jeffsnyder0/dell_idrac_fan_controller:latest
     container_name: Dell_iDRAC_fan_controller
     restart: unless-stopped
     environment:
@@ -306,7 +293,7 @@ Don't forget to give the project a star! Thanks again!
 
 To test locally, use either :
 ```bash
-docker build -t tigerblue77/dell_idrac_fan_controller:dev .
+docker build -t jeffsnyder0/dell_idrac_fan_controller:dev .
 docker run -d ...
 ```
 or run directly without Docker:
